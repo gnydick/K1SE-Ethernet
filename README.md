@@ -77,7 +77,8 @@ to the dongle because of the rename.
 Result: eth0 at 1000 Mbit, DHCP lease obtained, 0% loss pinging the gateway
 and from a PC on the LAN. `carrier_changes` stayed at 2 over 8 s (no flapping).
 The udev rename was observed working on a live module reload
-(`eth0: renamed from usb0`). A reboot test has not been run yet.
+(`eth0: renamed from usb0`). Reboot test passed on k1se-1: with the dongle
+attached, eth0 came up by itself at boot and obtained its lease.
 
 Patch applied to the source tree: `patches/0001-cdc_ncm-quiet-link-notifications.patch`.
 The AX88179B sends a link-status notification every 128 ms and stock 4.4
@@ -93,11 +94,15 @@ the kernel log stayed silent over a 6 s window.
 
 ## Known limitations
 
-- Hotplug after boot: on k1se-2 and k1se-3 the dongle was first attached
+- Hotplug after boot: on all three printers the dongle was first attached
   after the modules were loaded, and the whole chain ran unattended
-  (usb0 created, udev renamed it eth0, ifplugd ran ifup, DHCP lease). On
-  k1se-1 the first bring-up needed a manual `ifup eth0`; cause not isolated.
-  If eth0 has carrier but no address, `ifup eth0` is the fix.
+  (usb0 created, udev renamed it eth0, ifplugd ran ifup, DHCP lease). The
+  one manual `ifup eth0` on k1se-1 was during the very first test, before
+  the install script existed. If eth0 ever has carrier but no address,
+  `ifup eth0` is the fix.
+- Do not use raw `wl down` / `wl up` on the Wi-Fi radio. On k1se-1 a
+  `wl down wlan0` left the printer running but unreachable on both
+  interfaces until reboot. Use Creality's `wifi_down.sh` / `wifi_up.sh`.
 - Both wlan0 and eth0 get a default route; each DHCP client only replaces its
   own interface's default route. Disable Wi-Fi in the printer UI if a single
   path is wanted.
