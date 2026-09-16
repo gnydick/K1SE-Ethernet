@@ -29,6 +29,31 @@ Load order for a test (all in `/tmp`, nothing persisted):
 
     insmod /tmp/mii.ko && insmod /tmp/usbnet.ko && insmod /tmp/cdc_ncm.ko
 
+## Install
+
+On the printer, over SSH:
+
+    cd /usr/data
+    git clone https://github.com/gnydick/K1SE-Ethernet.git
+    cd K1SE-Ethernet
+    sh install.sh
+
+`install.sh` copies the modules to `/usr/data/k1se-eth/`, checks each copy
+against `modules/MANIFEST.md5`, installs the two boot files, reloads the udev
+rules and loads the modules. Re-running it changes nothing, so it is also the
+way to update a checkout.
+
+It refuses to install on a kernel other than the one the modules were built for,
+naming what it found and what it expected, because the kernel rejects a module
+whose vermagic differs. `--force` overrides that. `--no-load` copies the files
+without loading anything this boot.
+
+    sh install.sh status      # what is installed, what is loaded, eth0 state
+    sh install.sh uninstall   # remove it all again
+
+`uninstall` deliberately leaves the modules loaded: unloading `cdc_ncm` would
+drop your session if you reached the printer over eth0. Reboot to finish.
+
 ## Verification done before loading
 
 - vermagic `4.4.94 SMP preempt mod_unload MIPS32_R2 32BIT ` matches the
@@ -87,6 +112,11 @@ The three log calls are now `netif_dbg`, as upstream did later. After the swap
 the kernel log stayed silent over a 6 s window.
 
 ## Rollback
+
+    sh install.sh uninstall
+    reboot
+
+or by hand:
 
     rm /etc/init.d/S13usb_ethernet /etc/udev/rules.d/70-usb-ethernet.rules
     rm -r /usr/data/k1se-eth

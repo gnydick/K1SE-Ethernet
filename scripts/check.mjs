@@ -72,6 +72,54 @@ check("fast", "install", "udev rule renames a cdc_ncm net device to eth0", () =>
   for (const tok of ['SUBSYSTEM=="net"', 'ACTION=="add"', 'DRIVERS=="cdc_ncm"', 'NAME="eth0"']) if (!rule.includes(tok)) throw new Error(`rule lacks ${tok}`);
 });
 
+// install.sh is the entry point a stranger runs on their own printer after
+// cloning: it must be busybox-safe, must refuse a kernel it was not built for,
+// and must not unload the modules its caller may be reaching the printer over.
+const installer = () => readFileSync(join(ROOT, "install.sh"), "utf8");
+const DESTS = ["/usr/data/k1se-eth", "/etc/init.d/S13usb_ethernet", "/etc/udev/rules.d/70-usb-ethernet.rules"];
+
+check("fast", "install", "install.sh is a busybox-safe /bin/sh script", () => {
+  const s = installer();
+  if (!s.startsWith("#!/bin/sh\n")) throw new Error("must start with #!/bin/sh");
+  if (s.includes("\r")) throw new Error("contains CR; the printer's /bin/sh chokes on CRLF");
+  const bashisms = [["[[", "[[ ]] test"], ["function ", "function keyword"], ["source ", "source builtin"],
+                    ["<<<", "here-string"], ["+=(", "array append"], ["${!", "indirect expansion"]];
+  for (const [tok, what] of bashisms)
+    for (const [i, line] of s.split("\n").entries()) {
+      if (line.trim().startsWith("#")) continue;
+      if (line.includes(tok)) throw new Error(`line ${i + 1} uses ${what}, which busybox ash does not have`);
+    }
+});
+
+check("fast", "install", "install.sh refuses a kernel it was not built for, with an override", () => {
+  const s = installer();
+  if (!s.includes("vermagic")) throw new Error("does not read vermagic out of the shipped modules, so it cannot tell whether they fit this kernel");
+  if (!s.includes("uname")) throw new Error("never calls uname, so it cannot compare against the running kernel");
+  if (!/--force/.test(s)) throw new Error("no --force escape hatch for someone who knows their printer differs");
+  if (!s.includes("MANIFEST.md5")) throw new Error("does not verify the copied modules against modules/MANIFEST.md5");
+});
+
+check("fast", "install", "install.sh handles install, uninstall and status, and never rmmods", () => {
+  const s = installer();
+  for (const verb of ["install", "uninstall", "status"])
+    if (!s.split("\n").some((l) => l.trim() === verb + ")"))
+      throw new Error(`no \`${verb})\` branch`);
+  for (const [i, line] of s.split("\n").entries()) {
+    if (line.trim().startsWith("#")) continue;
+    if (line.includes("rmmod")) throw new Error(`line ${i + 1} rmmods: unloading cdc_ncm drops an SSH session that came in over eth0`);
+  }
+});
+
+check("fast", "install", "install.sh installs to the paths the README documents", () => {
+  const s = installer();
+  const readme = readFileSync(join(ROOT, "README.md"), "utf8");
+  for (const d of DESTS) {
+    if (!s.includes(d)) throw new Error(`install.sh never mentions ${d}`);
+    if (!readme.includes(d)) throw new Error(`README does not document ${d}, which install.sh writes`);
+  }
+  if (!readme.includes("install.sh")) throw new Error("README does not tell anyone to run install.sh");
+});
+
 const patchDir = join(ROOT, "patches");
 check("fast", "patches", "patches are unified diffs against drivers/net/usb", () => {
   if (!existsSync(patchDir)) return;
