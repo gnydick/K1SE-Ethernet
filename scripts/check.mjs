@@ -91,12 +91,35 @@ check("fast", "installer", "install.sh is a busybox-safe /bin/sh script", () => 
     }
 });
 
-check("fast", "installer", "install.sh refuses a kernel it was not built for, with an override", () => {
-  const s = installer();
-  if (!s.includes("vermagic")) throw new Error("does not read vermagic out of the shipped modules, so it cannot tell whether they fit this kernel");
-  if (!s.includes("uname")) throw new Error("never calls uname, so it cannot compare against the running kernel");
-  if (!/--force/.test(s)) throw new Error("no --force escape hatch for someone who knows their printer differs");
-  if (!s.includes("MANIFEST.md5")) throw new Error("does not verify the copied modules against modules/MANIFEST.md5");
+// Comment lines prove nothing: a header that says "refuses a kernel it was not
+// built for" satisfies any search for the words. These read code lines only.
+const codeOf = (s) => s.split("\n")
+  .map((l, i) => ({ n: i + 1, text: l }))
+  .filter((l) => !l.text.trim().startsWith("#"));
+
+check("fast", "installer", "install.sh's kernel gate is code, and refuses next to the comparison", () => {
+  const lines = codeOf(installer());
+  const find = (re) => lines.findIndex((l) => re.test(l.text));
+
+  if (find(/vermagic/) < 0) throw new Error("no code reads vermagic out of the shipped modules; a comment saying so is not a gate");
+  const cmp = find(/uname -r/);
+  if (cmp < 0) throw new Error("no code compares against `uname -r`, so nothing can tell this kernel from another");
+
+  // within the gate: it must be able to say no, and to be overridden
+  const window = lines.slice(cmp, cmp + 20).map((l) => l.text).join("\n");
+  if (!/\bdie\b|exit 1/.test(window))
+    throw new Error(`the \`uname -r\` comparison at line ${lines[cmp].n} is not followed by any refusal within 20 lines - it compares and carries on`);
+  if (!/FORCE/.test(window))
+    throw new Error(`nothing near the comparison at line ${lines[cmp].n} consults an override flag`);
+  if (!lines.some((l) => l.text.trim() === "--force)"))
+    throw new Error("no `--force)` branch in the argument parsing, so the refusal documented in the README cannot be overridden");
+
+  const md5 = find(/md5sum -c/);
+  if (md5 < 0) throw new Error("nothing runs `md5sum -c`, so the copied modules are never verified against modules/MANIFEST.md5");
+  // the failure path has to hang off the command itself - a `die` further down
+  // the function belongs to some other step
+  if (!/\|\||^\s*if /.test(lines[md5].text))
+    throw new Error(`the md5sum -c at line ${lines[md5].n} ignores its own exit status - a mismatched module would be installed anyway`);
 });
 
 check("fast", "installer", "install.sh handles install, uninstall and status, and never rmmods", () => {
@@ -106,7 +129,8 @@ check("fast", "installer", "install.sh handles install, uninstall and status, an
       throw new Error(`no \`${verb})\` branch`);
   for (const [i, line] of s.split("\n").entries()) {
     if (line.trim().startsWith("#")) continue;
-    if (line.includes("rmmod")) throw new Error(`line ${i + 1} rmmods: unloading cdc_ncm drops an SSH session that came in over eth0`);
+    for (const bad of ["rmmod", "modprobe -r", "modprobe --remove"])
+      if (line.includes(bad)) throw new Error(`line ${i + 1} uses ${bad}: unloading cdc_ncm drops an SSH session that came in over eth0`);
   }
 });
 

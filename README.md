@@ -38,15 +38,20 @@ On the printer, over SSH:
     cd K1SE-Ethernet
     sh install.sh
 
-`install.sh` copies the modules to `/usr/data/k1se-eth/`, checks each copy
-against `modules/MANIFEST.md5`, installs the two boot files, reloads the udev
-rules and loads the modules. Re-running it changes nothing, so it is also the
-way to update a checkout.
+`install.sh` stages the modules into `/usr/data/k1se-eth/`, checks each staged
+copy against `modules/MANIFEST.md5` before moving it into place, installs the two
+boot files, reloads the udev rules and loads the modules. Re-running it is safe;
+it is also how you update after a `git pull` - but note that the kernel will not
+re-insert a module that is already loaded, so **after an update, reboot**. The
+script says so when it finds the driver already running.
 
 It refuses to install on a kernel other than the one the modules were built for,
 naming what it found and what it expected, because the kernel rejects a module
-whose vermagic differs. `--force` overrides that. `--no-load` copies the files
-without loading anything this boot.
+whose vermagic differs. It also stops, more mildly, on the same kernel version
+built differently from the `#392` this was tested on - there the vermagic matches
+and the modules will very likely work, so this is a prompt rather than a warning.
+`--force` gets past either. `--no-load` copies the files without loading anything
+this boot.
 
     sh install.sh status      # what is installed, what is loaded, eth0 state
     sh install.sh uninstall   # remove it all again

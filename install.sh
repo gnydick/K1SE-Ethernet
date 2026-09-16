@@ -88,29 +88,58 @@ preflight() {
 	check_kernel
 }
 
+# Write a file by way of a temporary name, so a copy that runs out of space
+# cannot truncate the copy that is already installed and working.
+install_file() {
+	cp "$1" "$2.new" || die "could not write $2.new (is the filesystem full?) - $2 was left as it was"
+	chmod "$3" "$2.new" || die "could not chmod $2.new"
+	mv "$2.new" "$2" || die "could not put $2.new in place as $2"
+	echo "  $2"
+}
+
 do_install() {
 	echo "Preflight:"
 	preflight
 
+	# Was the driver already running before we touched anything? If it was, the
+	# boot script will not re-insert it, and a caller who just updated the
+	# modules needs to know the new code is not what is running.
+	already_loaded=no
+	grep -q '^cdc_ncm ' /proc/modules && already_loaded=yes
+
 	echo "Modules -> $MODDIR:"
 	mkdir -p "$MODDIR" || die "could not create $MODDIR"
-	cp "$SRC"/modules/*.ko "$MODDIR"/ || die "could not copy the modules to $MODDIR"
-	( cd "$MODDIR" && md5sum -c "$MANIFEST" ) || die "a module did not match modules/MANIFEST.md5 after copying"
+	stage=$MODDIR/.staging
+	rm -rf "$stage"
+	mkdir -p "$stage" || die "could not create $stage"
+	cp "$SRC"/modules/*.ko "$stage"/ || {
+		rm -rf "$stage"
+		die "could not copy the modules into $stage (is /usr/data full?) - anything already installed was left alone"
+	}
+	( cd "$stage" && md5sum -c "$MANIFEST" ) || {
+		rm -rf "$stage"
+		die "a staged module did not match modules/MANIFEST.md5 - nothing was replaced"
+	}
+	for f in "$stage"/*.ko; do
+		mv "$f" "$MODDIR"/ || die "could not move $(basename "$f") into $MODDIR"
+	done
+	rm -rf "$stage"
 
 	echo "Boot files:"
-	cp "$SRC/install/S13usb_ethernet" "$INITD" || die "could not write $INITD"
-	chmod 755 "$INITD"
-	echo "  $INITD"
-	cp "$SRC/install/70-usb-ethernet.rules" "$UDEV" || die "could not write $UDEV"
-	chmod 644 "$UDEV"
-	echo "  $UDEV"
+	install_file "$SRC/install/S13usb_ethernet" "$INITD" 755
+	install_file "$SRC/install/70-usb-ethernet.rules" "$UDEV" 644
 	udevadm control --reload-rules > /dev/null 2>&1 && echo "  udev rules reloaded"
 
 	if [ "$NOLOAD" = 1 ]; then
 		echo "Not loading the modules (--no-load); they will load at the next boot."
+	elif [ "$already_loaded" = yes ]; then
+		echo "Already loaded, so nothing was inserted."
+		echo "  If you just updated the modules, reboot to run the new ones -"
+		echo "  the copies on disk are new, the code in the kernel is not."
 	else
 		echo "Loading now:"
-		sh "$INITD" start
+		sh "$INITD" start || die "the boot script could not load the modules (see the line above).
+  The files are in place, so a reboot will try again."
 	fi
 
 	echo
