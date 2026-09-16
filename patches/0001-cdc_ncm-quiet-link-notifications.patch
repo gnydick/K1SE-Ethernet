@@ -1,0 +1,28 @@
+diff --git a/drivers/net/usb/cdc_ncm.c b/drivers/net/usb/cdc_ncm.c
+index e0e94b85..80780368 100644
+--- a/drivers/net/usb/cdc_ncm.c
++++ b/drivers/net/usb/cdc_ncm.c
+@@ -1480,12 +1480,12 @@ cdc_ncm_speed_change(struct usbnet *dev,
+ 	 * device speed. Do print it instead.
+ 	 */
+ 	if ((tx_speed > 1000000) && (rx_speed > 1000000)) {
+-		netif_info(dev, link, dev->net,
++		netif_dbg(dev, link, dev->net,
+ 			   "%u mbit/s downlink %u mbit/s uplink\n",
+ 			   (unsigned int)(rx_speed / 1000000U),
+ 			   (unsigned int)(tx_speed / 1000000U));
+ 	} else {
+-		netif_info(dev, link, dev->net,
++		netif_dbg(dev, link, dev->net,
+ 			   "%u kbit/s downlink %u kbit/s uplink\n",
+ 			   (unsigned int)(rx_speed / 1000U),
+ 			   (unsigned int)(tx_speed / 1000U));
+@@ -1518,7 +1518,7 @@ static void cdc_ncm_status(struct usbnet *dev, struct urb *urb)
+ 		 * USB_CDC_NOTIFY_NETWORK_CONNECTION notification shall be
+ 		 * sent by device after USB_CDC_NOTIFY_SPEED_CHANGE.
+ 		 */
+-		netif_info(dev, link, dev->net,
++		netif_dbg(dev, link, dev->net,
+ 			   "network connection: %sconnected\n",
+ 			   !!event->wValue ? "" : "dis");
+ 		usbnet_link_change(dev, !!event->wValue, 0);

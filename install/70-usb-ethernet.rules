@@ -1,0 +1,2 @@
+# Rename the CDC-NCM USB ethernet dongle to eth0 so /etc/network/interfaces and ifplugd pick it up.
+SUBSYSTEM=="net", ACTION=="add", KERNEL=="usb*", DRIVERS=="cdc_ncm", NAME="eth0"
