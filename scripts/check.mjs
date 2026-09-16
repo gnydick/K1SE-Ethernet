@@ -78,7 +78,7 @@ check("fast", "install", "udev rule renames a cdc_ncm net device to eth0", () =>
 const installer = () => readFileSync(join(ROOT, "install.sh"), "utf8");
 const DESTS = ["/usr/data/k1se-eth", "/etc/init.d/S13usb_ethernet", "/etc/udev/rules.d/70-usb-ethernet.rules"];
 
-check("fast", "install", "install.sh is a busybox-safe /bin/sh script", () => {
+check("fast", "installer", "install.sh is a busybox-safe /bin/sh script", () => {
   const s = installer();
   if (!s.startsWith("#!/bin/sh\n")) throw new Error("must start with #!/bin/sh");
   if (s.includes("\r")) throw new Error("contains CR; the printer's /bin/sh chokes on CRLF");
@@ -91,7 +91,7 @@ check("fast", "install", "install.sh is a busybox-safe /bin/sh script", () => {
     }
 });
 
-check("fast", "install", "install.sh refuses a kernel it was not built for, with an override", () => {
+check("fast", "installer", "install.sh refuses a kernel it was not built for, with an override", () => {
   const s = installer();
   if (!s.includes("vermagic")) throw new Error("does not read vermagic out of the shipped modules, so it cannot tell whether they fit this kernel");
   if (!s.includes("uname")) throw new Error("never calls uname, so it cannot compare against the running kernel");
@@ -99,7 +99,7 @@ check("fast", "install", "install.sh refuses a kernel it was not built for, with
   if (!s.includes("MANIFEST.md5")) throw new Error("does not verify the copied modules against modules/MANIFEST.md5");
 });
 
-check("fast", "install", "install.sh handles install, uninstall and status, and never rmmods", () => {
+check("fast", "installer", "install.sh handles install, uninstall and status, and never rmmods", () => {
   const s = installer();
   for (const verb of ["install", "uninstall", "status"])
     if (!s.split("\n").some((l) => l.trim() === verb + ")"))
@@ -110,7 +110,7 @@ check("fast", "install", "install.sh handles install, uninstall and status, and 
   }
 });
 
-check("fast", "install", "install.sh installs to the paths the README documents", () => {
+check("fast", "installer", "install.sh installs to the paths the README documents", () => {
   const s = installer();
   const readme = readFileSync(join(ROOT, "README.md"), "utf8");
   for (const d of DESTS) {

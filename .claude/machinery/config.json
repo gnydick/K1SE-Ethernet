@@ -3,6 +3,7 @@
   "components": {
     "modules": "modules/",
     "install": "install/",
+    "installer": "install.sh",
     "patches": "patches/"
   },
   "tiers": {
