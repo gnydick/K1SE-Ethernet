@@ -65,23 +65,29 @@ check("fast", "install", "S13usb_ethernet is a /bin/sh script that loads mii, us
   for (const m of ["mii", "usbnet", "cdc_ncm"]) if (!s.includes(m)) throw new Error(`does not mention ${m}`);
   if (!/case "\$1" in/.test(s) || !/start\)/.test(s)) throw new Error("needs a case \"$1\" in ... start) block like the other S?? scripts");
 });
-check("fast", "install", "S13usb_ethernet keeps the udev rename race quiet but still reports a real failure", () => {
-  const s = readFileSync(join(installDir, "S13usb_ethernet"), "utf8");
-  const renames = s.split("\n")
-    .map((text, i) => ({ n: i + 1, text }))
-    .filter((l) => /ip link set usb0 name eth0/.test(l.text) && !l.text.trim().startsWith("#"));
+check("fast", "install", "S13usb_ethernet silences the retries and lets the last rename speak", () => {
+  const lines = readFileSync(join(installDir, "S13usb_ethernet"), "utf8").split("\n")
+    .map((raw, i) => ({ n: i + 1, raw, code: raw.replace(/\s#.*$/, "") }));
+  const renames = lines.filter((l) => /ip link set usb0 name eth0/.test(l.code));
   if (!renames.length) throw new Error("nothing renames usb0 to eth0, so a printer whose udev rule did not fire has no fallback");
 
-  // Inside the retry loop udev normally wins, and its rename makes usb0 vanish
-  // between the test and this command - an expected error, not news.
-  const quiet = renames.filter((l) => /2>\/dev\/null/.test(l.text));
-  if (!quiet.length)
-    throw new Error(`the rename at line ${renames[0].n} does not discard stderr; losing the race with udev prints 'Cannot find device "usb0"' on every from-scratch install`);
+  // Counting silenced attempts is not enough: loud-in-the-loop and quiet-after
+  // passes any count test while printing the error on every iteration. What
+  // matters is which one speaks - the last, after the retries have given up.
+  const quiet = (l) => /2>\/dev\/null/.test(l.code);
+  const last = renames[renames.length - 1];
+  if (quiet(last))
+    throw new Error(`every rename discards stderr (last at line ${last.n}), so a rename that genuinely cannot happen gives the user nothing to go on`);
+  for (const l of renames.slice(0, -1))
+    if (!quiet(l))
+      throw new Error(`the rename at line ${l.n} runs before the last one and does not discard stderr; losing the race with udev prints 'Cannot find device "usb0"' on every attempt`);
 
-  // ...but if every one of them is silenced, a rename that genuinely cannot
-  // happen leaves the user with no reason why.
-  if (quiet.length === renames.length)
-    throw new Error("every rename discards stderr, so a genuine failure to rename usb0 would give the user nothing to go on; keep one attempt whose errors are visible");
+  // ...and the one that speaks has to be guarded, or it fires on every boot
+  // with no dongle attached, where there is no usb0 to rename and nothing wrong.
+  const guard = lines.slice(Math.max(0, last.n - 4), last.n - 1)
+    .some((l) => /\/sys\/class\/net\/usb0/.test(l.code));
+  if (!guard)
+    throw new Error(`the rename at line ${last.n} is not guarded by a /sys/class/net/usb0 test in the 3 lines above it, so it would complain on every dongle-less boot`);
 });
 
 check("fast", "install", "udev rule renames a cdc_ncm net device to eth0", () => {
