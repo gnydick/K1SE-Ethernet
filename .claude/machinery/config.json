@@ -1,3 +1,15 @@
 {
-  "worktree": "always"
+  "worktree": "always",
+  "components": {
+    "modules": "modules/",
+    "install": "install/",
+    "patches": "patches/"
+  },
+  "tiers": {
+    "declaration": "each check in scripts/check.mjs is registered as check(tier, component, name, fn); the tier is the first argument",
+    "fast": "node scripts/check.mjs --tier fast <components>",
+    "merge": "node scripts/check.mjs --tier merge",
+    "heavy": "node scripts/check.mjs --tier heavy",
+    "assignment": "propose-per-commit"
+  }
 }
