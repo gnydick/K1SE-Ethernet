@@ -1,5 +1,5 @@
 {
-  "worktree": "always",
+  "worktree": "multi-commit",
   "components": {
     "modules": "modules/",
     "install": "install/",
