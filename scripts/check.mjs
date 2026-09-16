@@ -97,7 +97,12 @@ if (args.includes("--write-manifest")) {
 const ti = args.indexOf("--tier"); const tier = ti >= 0 ? args[ti + 1] : "merge";
 const comps = args.filter((a, i) => !a.startsWith("--") && i !== ti + 1);
 const order = { fast: 0, merge: 1, heavy: 2 };
+if (!(tier in order)) { console.log(`unknown tier "${tier}"; use fast, merge or heavy`); process.exit(2); }
+const known = [...new Set(checks.map((c) => c.component))];
+const unknown = comps.filter((c) => !known.includes(c));
+if (unknown.length) { console.log(`unknown component(s) ${unknown.join(", ")}; known: ${known.join(", ")}`); process.exit(2); }
 const selected = checks.filter((c) => order[c.tier] <= order[tier] && (tier !== "fast" || !comps.length || comps.includes(c.component)));
+if (!selected.length) { console.log(`${tier}_tier: no checks selected — refusing to pass on nothing`); process.exit(2); }
 let failed = 0; const t0 = performance.now();
 for (const c of selected) {
   try { c.fn(); console.log(`ok    [${c.tier}/${c.component}] ${c.name}`); }

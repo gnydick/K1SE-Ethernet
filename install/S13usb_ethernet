@@ -6,6 +6,10 @@ MODDIR=/usr/data/k1se-eth
 case "$1" in
   start)
 	printf "Loading USB ethernet modules: "
+	# /usr/data is mounted by S02mount_mmc_ext4; wait for it if an fsck delayed it
+	i=0
+	while [ ! -f $MODDIR/mii.ko ] && [ $i -lt 100 ]; do i=$((i+1)); sleep 0.1; done
+	[ -f $MODDIR/mii.ko ] || { echo "FAIL ($MODDIR not available)"; exit 1; }
 	for m in mii usbnet cdc_ncm; do
 		grep -q "^$m " /proc/modules || insmod $MODDIR/$m.ko || { echo "FAIL ($m)"; exit 1; }
 	done
@@ -18,7 +22,10 @@ case "$1" in
 		fi
 		i=$((i+1)); sleep 0.1
 	done
-	echo "OK"
+	if [ -d /sys/class/net/eth0 ]; then echo "OK (eth0 present)"
+	elif [ -d /sys/class/net/usb0 ]; then echo "OK (modules loaded; usb0 could not be renamed to eth0)"
+	else echo "OK (modules loaded; no dongle detected yet)"
+	fi
 	;;
   stop)
 	;;
