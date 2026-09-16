@@ -1,1 +1,1 @@
-Use GitHub Issues on gnydick/K1SE-Ethernet (private repo, gh CLI signed in as gnydick) to track this project.
+Use GitHub Issues on gnydick/K1SE-Ethernet (public repo since 2026-09-16, gh CLI signed in as gnydick) to track this project. Issues are world-readable: keep credentials and anything else private out of them.
