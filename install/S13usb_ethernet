@@ -1,6 +1,7 @@
 #!/bin/sh
 # Load USB ethernet (CDC-NCM) modules for the UGREEN 20256 / ASIX AX88179B dongle.
-# Runs after S12udev so the udev rule renames usb0 -> eth0; the loop below is a fallback.
+# Runs after S12udev, so the udev rule (70-usb-ethernet.rules) is in place to
+# rename usb0 -> eth0 as soon as the device appears. This script only loads.
 MODDIR=/usr/data/k1se-eth
 
 case "$1" in
@@ -13,24 +14,12 @@ case "$1" in
 	for m in mii usbnet cdc_ncm; do
 		grep -q "^$m " /proc/modules || insmod $MODDIR/$m.ko || { echo "FAIL ($m)"; exit 1; }
 	done
-	# Fallback rename if udev did not do it. udev usually gets there first, and
-	# its rename makes usb0 vanish between the test and the command below, so
-	# errors here are the expected outcome rather than news - hence 2>/dev/null.
-	i=0
-	while [ $i -lt 30 ]; do
-		[ -d /sys/class/net/eth0 ] && break
-		if [ -d /sys/class/net/usb0 ]; then
-			ip link set usb0 name eth0 2>/dev/null && break
-		fi
-		i=$((i+1)); sleep 0.1
-	done
-	# Still usb0 after all that: udev is not going to do it, so try once more
-	# and let this one's error through - by now it is a real failure to explain.
-	if [ ! -d /sys/class/net/eth0 ] && [ -d /sys/class/net/usb0 ]; then
-		ip link set usb0 name eth0
-	fi
+	# Naming is 70-usb-ethernet.rules' job and bringing the link up is ifplugd's,
+	# so there is nothing to wait for here: whenever the device appears - now, or
+	# when someone plugs it in later - udev renames usb0 to eth0. This script
+	# reports what it can see at this instant and gets out of the way.
 	if [ -d /sys/class/net/eth0 ]; then echo "OK (eth0 present)"
-	elif [ -d /sys/class/net/usb0 ]; then echo "OK (modules loaded; usb0 could not be renamed to eth0)"
+	elif [ -d /sys/class/net/usb0 ]; then echo "OK (modules loaded; udev has not renamed usb0 yet)"
 	else echo "OK (modules loaded; no dongle detected yet)"
 	fi
 	;;

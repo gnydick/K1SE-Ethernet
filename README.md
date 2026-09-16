@@ -96,7 +96,7 @@ Build tree lives on the Linux box at `~/k1se-eth/` with `build.sh` to rebuild.
 | on printer | from |
 |---|---|
 | `/usr/data/k1se-eth/*.ko` | `modules/` |
-| `/etc/init.d/S13usb_ethernet` | `install/S13usb_ethernet` (insmod mii, usbnet, cdc_ncm; fallback rename) |
+| `/etc/init.d/S13usb_ethernet` | `install/S13usb_ethernet` (insmod mii, usbnet, cdc_ncm) |
 | `/etc/udev/rules.d/70-usb-ethernet.rules` | `install/70-usb-ethernet.rules` (renames usb0 to eth0) |
 
 The two `/etc` files live in `/overlay/upper`, the modules on the `/usr/data`

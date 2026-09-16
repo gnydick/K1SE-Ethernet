@@ -65,29 +65,25 @@ check("fast", "install", "S13usb_ethernet is a /bin/sh script that loads mii, us
   for (const m of ["mii", "usbnet", "cdc_ncm"]) if (!s.includes(m)) throw new Error(`does not mention ${m}`);
   if (!/case "\$1" in/.test(s) || !/start\)/.test(s)) throw new Error("needs a case \"$1\" in ... start) block like the other S?? scripts");
 });
-check("fast", "install", "S13usb_ethernet silences the retries and lets the last rename speak", () => {
+check("fast", "install", "S13usb_ethernet loads modules and leaves naming to udev", () => {
   const lines = readFileSync(join(installDir, "S13usb_ethernet"), "utf8").split("\n")
-    .map((raw, i) => ({ n: i + 1, raw, code: raw.replace(/\s#.*$/, "") }));
-  const renames = lines.filter((l) => /ip link set usb0 name eth0/.test(l.code));
-  if (!renames.length) throw new Error("nothing renames usb0 to eth0, so a printer whose udev rule did not fire has no fallback");
+    .map((raw, i) => ({ n: i + 1, code: raw.replace(/\s#.*$/, "") }))
+    .filter((l) => !l.code.trim().startsWith("#"));
 
-  // Counting silenced attempts is not enough: loud-in-the-loop and quiet-after
-  // passes any count test while printing the error on every iteration. What
-  // matters is which one speaks - the last, after the retries have given up.
-  const quiet = (l) => /2>\/dev\/null/.test(l.code);
-  const last = renames[renames.length - 1];
-  if (quiet(last))
-    throw new Error(`every rename discards stderr (last at line ${last.n}), so a rename that genuinely cannot happen gives the user nothing to go on`);
-  for (const l of renames.slice(0, -1))
-    if (!quiet(l))
-      throw new Error(`the rename at line ${l.n} runs before the last one and does not discard stderr; losing the race with udev prints 'Cannot find device "usb0"' on every attempt`);
+  // Two mechanisms renaming one interface is what produced the race, the 3s
+  // poll and the OK-on-failure. The udev rule owns the name; this script does not.
+  const renamer = lines.find((l) => /ip\s+link\s+set|\bnameif\b/.test(l.code));
+  if (renamer)
+    throw new Error(`line ${renamer.n} renames an interface; naming belongs to 70-usb-ethernet.rules, and a second renamer brings back the race with udev`);
 
-  // ...and the one that speaks has to be guarded, or it fires on every boot
-  // with no dongle attached, where there is no usb0 to rename and nothing wrong.
-  const guard = lines.slice(Math.max(0, last.n - 4), last.n - 1)
-    .some((l) => /\/sys\/class\/net\/usb0/.test(l.code));
-  if (!guard)
-    throw new Error(`the rename at line ${last.n} is not guarded by a /sys/class/net/usb0 test in the 3 lines above it, so it would complain on every dongle-less boot`);
+  // ...and it must not sit waiting for an interface it does not create.
+  const waiter = lines.find((l) => /\/sys\/class\/net/.test(l.code) && /\bsleep\b|\bwhile\b/.test(l.code));
+  if (waiter)
+    throw new Error(`line ${waiter.n} waits on /sys/class/net; with no dongle attached that wait can never succeed and it delays everything after S13 in rcS`);
+  const sleepers = lines.filter((l) => /\bsleep\b/.test(l.code));
+  for (const l of sleepers)
+    if (!/MODDIR/.test(l.code))
+      throw new Error(`the sleep at line ${l.n} is not part of waiting for ${"$MODDIR"} to be mounted; this script should not be sleeping for anything else`);
 });
 
 check("fast", "install", "udev rule renames a cdc_ncm net device to eth0", () => {
