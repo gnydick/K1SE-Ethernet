@@ -138,6 +138,10 @@ or by hand:
 - Do not use raw `wl down` / `wl up` on the Wi-Fi radio. On k1se-1 a
   `wl down wlan0` left the printer running but unreachable on both
   interfaces until reboot. Use Creality's `wifi_down.sh` / `wifi_up.sh`.
+- The udev rule is the only thing that names the dongle `eth0`; `S13usb_ethernet`
+  just loads the modules. On a printer whose udevd is not working there is no
+  second path to the name - the interface stays `usb0` and nothing brings it up.
+  `sh install.sh status` reports exactly that case.
 - Both wlan0 and eth0 get a default route; each DHCP client only replaces its
   own interface's default route. Disable Wi-Fi in the printer UI if a single
   path is wanted.

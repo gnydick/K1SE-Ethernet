@@ -128,7 +128,12 @@ do_install() {
 	echo "Boot files:"
 	install_file "$SRC/install/S13usb_ethernet" "$INITD" 755
 	install_file "$SRC/install/70-usb-ethernet.rules" "$UDEV" 644
-	udevadm control --reload-rules > /dev/null 2>&1 && echo "  udev rules reloaded"
+	if udevadm control --reload-rules > /dev/null 2>&1; then
+		echo "  udev rules reloaded"
+	else
+		echo "  WARNING: could not reload the udev rules. udev is the only thing"
+		echo "  that names the dongle eth0, so it may come up as usb0 until you reboot."
+	fi
 
 	if [ "$NOLOAD" = 1 ]; then
 		echo "Not loading the modules (--no-load); they will load at the next boot."

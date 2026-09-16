@@ -19,7 +19,7 @@ case "$1" in
 	# when someone plugs it in later - udev renames usb0 to eth0. This script
 	# reports what it can see at this instant and gets out of the way.
 	if [ -d /sys/class/net/eth0 ]; then echo "OK (eth0 present)"
-	elif [ -d /sys/class/net/usb0 ]; then echo "OK (modules loaded; udev has not renamed usb0 yet)"
+	elif [ -d /sys/class/net/usb0 ]; then echo "OK (modules loaded; udev names it eth0 - if it stays usb0, see install.sh status)"
 	else echo "OK (modules loaded; no dongle detected yet)"
 	fi
 	;;

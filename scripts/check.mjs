@@ -59,10 +59,16 @@ const installDir = join(ROOT, "install");
 check("fast", "install", "install files are LF-only, no trailing CR", () => {
   for (const f of readdirSync(installDir)) if (readFileSync(join(installDir, f), "latin1").includes("\r")) throw new Error(`${f} contains CR; the printer's /bin/sh chokes on CRLF`);
 });
-check("fast", "install", "S13usb_ethernet is a /bin/sh script that loads mii, usbnet, cdc_ncm", () => {
+check("fast", "install", "S13usb_ethernet is a /bin/sh script that insmods mii, usbnet, cdc_ncm", () => {
   const s = readFileSync(join(installDir, "S13usb_ethernet"), "utf8");
   if (!s.startsWith("#!/bin/sh\n")) throw new Error("must start with #!/bin/sh");
-  for (const m of ["mii", "usbnet", "cdc_ncm"]) if (!s.includes(m)) throw new Error(`does not mention ${m}`);
+  // mentioning the modules is not loading them: a script whose only trace of
+  // them is a comment used to pass this.
+  const code = s.split("\n").map((l) => l.replace(/\s#.*$/, ""))
+    .filter((l) => !l.trim().startsWith("#")).join("\n");
+  if (!/insmod/.test(code)) throw new Error("never runs insmod, so it loads nothing");
+  if (!/insmod[^\n]*MODDIR/.test(code)) throw new Error("insmod does not load from $MODDIR, where install.sh puts the modules");
+  for (const m of ["mii", "usbnet", "cdc_ncm"]) if (!code.includes(m)) throw new Error(`no code names ${m}`);
   if (!/case "\$1" in/.test(s) || !/start\)/.test(s)) throw new Error("needs a case \"$1\" in ... start) block like the other S?? scripts");
 });
 check("fast", "install", "S13usb_ethernet loads modules and leaves naming to udev", () => {
@@ -77,10 +83,12 @@ check("fast", "install", "S13usb_ethernet loads modules and leaves naming to ude
     throw new Error(`line ${renamer.n} renames an interface; naming belongs to 70-usb-ethernet.rules, and a second renamer brings back the race with udev`);
 
   // ...and it must not sit waiting for an interface it does not create.
-  const waiter = lines.find((l) => /\/sys\/class\/net/.test(l.code) && /\bsleep\b|\bwhile\b/.test(l.code));
+  // udevadm settle blocks with neither keyword, and usleep defeats \bsleep\b.
+  const blocking = /\b(u?sleep|udevadm|while|until)\b/;
+  const waiter = lines.find((l) => /\/sys\/class\/net/.test(l.code) && blocking.test(l.code));
   if (waiter)
     throw new Error(`line ${waiter.n} waits on /sys/class/net; with no dongle attached that wait can never succeed and it delays everything after S13 in rcS`);
-  const sleepers = lines.filter((l) => /\bsleep\b/.test(l.code));
+  const sleepers = lines.filter((l) => /\bu?sleep\b/.test(l.code));
   for (const l of sleepers)
     if (!/MODDIR/.test(l.code))
       throw new Error(`the sleep at line ${l.n} is not part of waiting for ${"$MODDIR"} to be mounted; this script should not be sleeping for anything else`);
