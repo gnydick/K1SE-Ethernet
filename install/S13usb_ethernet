@@ -13,15 +13,22 @@ case "$1" in
 	for m in mii usbnet cdc_ncm; do
 		grep -q "^$m " /proc/modules || insmod $MODDIR/$m.ko || { echo "FAIL ($m)"; exit 1; }
 	done
-	# fallback rename if udev did not do it
+	# Fallback rename if udev did not do it. udev usually gets there first, and
+	# its rename makes usb0 vanish between the test and the command below, so
+	# errors here are the expected outcome rather than news - hence 2>/dev/null.
 	i=0
 	while [ $i -lt 30 ]; do
 		[ -d /sys/class/net/eth0 ] && break
 		if [ -d /sys/class/net/usb0 ]; then
-			ip link set usb0 name eth0 && break
+			ip link set usb0 name eth0 2>/dev/null && break
 		fi
 		i=$((i+1)); sleep 0.1
 	done
+	# Still usb0 after all that: udev is not going to do it, so try once more
+	# and let this one's error through - by now it is a real failure to explain.
+	if [ ! -d /sys/class/net/eth0 ] && [ -d /sys/class/net/usb0 ]; then
+		ip link set usb0 name eth0
+	fi
 	if [ -d /sys/class/net/eth0 ]; then echo "OK (eth0 present)"
 	elif [ -d /sys/class/net/usb0 ]; then echo "OK (modules loaded; usb0 could not be renamed to eth0)"
 	else echo "OK (modules loaded; no dongle detected yet)"

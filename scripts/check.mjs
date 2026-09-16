@@ -65,6 +65,25 @@ check("fast", "install", "S13usb_ethernet is a /bin/sh script that loads mii, us
   for (const m of ["mii", "usbnet", "cdc_ncm"]) if (!s.includes(m)) throw new Error(`does not mention ${m}`);
   if (!/case "\$1" in/.test(s) || !/start\)/.test(s)) throw new Error("needs a case \"$1\" in ... start) block like the other S?? scripts");
 });
+check("fast", "install", "S13usb_ethernet keeps the udev rename race quiet but still reports a real failure", () => {
+  const s = readFileSync(join(installDir, "S13usb_ethernet"), "utf8");
+  const renames = s.split("\n")
+    .map((text, i) => ({ n: i + 1, text }))
+    .filter((l) => /ip link set usb0 name eth0/.test(l.text) && !l.text.trim().startsWith("#"));
+  if (!renames.length) throw new Error("nothing renames usb0 to eth0, so a printer whose udev rule did not fire has no fallback");
+
+  // Inside the retry loop udev normally wins, and its rename makes usb0 vanish
+  // between the test and this command - an expected error, not news.
+  const quiet = renames.filter((l) => /2>\/dev\/null/.test(l.text));
+  if (!quiet.length)
+    throw new Error(`the rename at line ${renames[0].n} does not discard stderr; losing the race with udev prints 'Cannot find device "usb0"' on every from-scratch install`);
+
+  // ...but if every one of them is silenced, a rename that genuinely cannot
+  // happen leaves the user with no reason why.
+  if (quiet.length === renames.length)
+    throw new Error("every rename discards stderr, so a genuine failure to rename usb0 would give the user nothing to go on; keep one attempt whose errors are visible");
+});
+
 check("fast", "install", "udev rule renames a cdc_ncm net device to eth0", () => {
   const s = readFileSync(join(installDir, "70-usb-ethernet.rules"), "utf8");
   const rule = s.split("\n").find((l) => l.trim() && !l.startsWith("#"));
