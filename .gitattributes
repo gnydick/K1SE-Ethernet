@@ -1,0 +1,4 @@
+install/* text eol=lf
+scripts/* text eol=lf
+*.ko binary
+*.patch text eol=lf
