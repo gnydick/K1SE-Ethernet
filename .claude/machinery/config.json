@@ -12,5 +12,6 @@
     "heavy": "node scripts/check.mjs --tier heavy",
     "assignment": "propose-per-commit"
   },
-  "comparisonAgent": "push-to-main"
+  "comparisonAgent": "push-to-main",
+  "reviewBeforeMain": "person-and-agent"
 }
