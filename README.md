@@ -127,6 +127,47 @@ or by hand:
     rm -r /usr/data/k1se-eth
     reboot
 
+## Wi-Fi on a wired printer
+
+Symptom: the slicer's network scan shows the printer's **Wi-Fi** address rather
+than the wired one, or intermittently does not list the printer at all.
+
+Cause: `/usr/bin/mdns`, started by `S99mdns`, enumerates addresses with
+`getifaddrs` and publishes the first one it finds - it has no flag to choose
+(`--service`, `--port`, `--hostname`, `--query`, `--discovery`, `--dump` are all
+of them). wlan0's ifindex is lower than eth0's, because the Wi-Fi driver loads
+at `S11module_driver_default` and ours at `S13`, so whenever Wi-Fi already has an
+address by the time `mdns` starts the printer publishes the Wi-Fi address. It is
+a race: measured across three printers, `mdns` started at boot+9s, +14s and +16s,
+and the one that started at +9s - before Wi-Fi had its lease - published the
+wired address while the other two published Wi-Fi.
+
+With both interfaces on one subnet you also get two default routes, and the
+kernel answering ARP for either address out of whichever interface routing
+picks, so the IP-to-MAC pairing looks crossed from another host.
+
+The fix that sticks is to leave Wi-Fi with nothing to associate with:
+
+    cp -p /usr/data/wpa_supplicant.conf /usr/data/wpa_supplicant.conf.with-networks
+    awk '/^network=\{/{skip=1} skip&&/^\}/{skip=0;next} !skip' \
+        /usr/data/wpa_supplicant.conf.with-networks > /usr/data/wpa_supplicant.conf
+    reboot
+
+After the reboot wlan0 still exists but sits `dormant` with no address, there is
+a single default route via eth0, and `mdns` publishes the wired address. Verified
+on k1se-1 and k1se-2 across reboots: `wifi-server` still starts `wpa_supplicant`
+at about 13s as it always did, it simply has nothing to connect to, and it does
+not put the networks back.
+
+To undo it, restore the backup and reboot - or add the network again on the
+printer's own Wi-Fi page, since wlan0 and `wpa_supplicant` are both still there
+(that second route is reasoned from the running processes, not tested).
+
+Two things that do **not** work, both tried: renaming `S44wifi_bcm_up` out of
+rcS's `S??*` glob, and setting `"wifi_sw":0` in
+`/usr/data/creality/userdata/config/system_config.json`. `/usr/bin/wifi-server`
+runs `wifi_up.sh` itself at about 13s into the boot, regardless of either.
+
 ## Known limitations
 
 - Hotplug after boot: on all three printers the dongle was first attached
@@ -137,11 +178,14 @@ or by hand:
   `ifup eth0` is the fix.
 - Do not use raw `wl down` / `wl up` on the Wi-Fi radio. On k1se-1 a
   `wl down wlan0` left the printer running but unreachable on both
-  interfaces until reboot. Use Creality's `wifi_down.sh` / `wifi_up.sh`.
+  interfaces until reboot. Creality's own `wifi_down.sh` is not the answer
+  either: it opens with `killall -9 udhcpc`, which takes eth0's DHCP client
+  with it, so the wired lease stops renewing. See the section above instead.
 - The udev rule is the only thing that names the dongle `eth0`; `S13usb_ethernet`
   just loads the modules. On a printer whose udevd is not working there is no
   second path to the name - the interface stays `usb0` and nothing brings it up.
   `sh install.sh status` reports exactly that case.
 - Both wlan0 and eth0 get a default route; each DHCP client only replaces its
-  own interface's default route. Disable Wi-Fi in the printer UI if a single
-  path is wanted.
+  own interface's default route. The printer UI's Wi-Fi switch does not settle
+  this: it turns the radio off for the session, but `wifi-server` brings it back
+  at the next boot. See "Wi-Fi on a wired printer" above for the one that holds.
